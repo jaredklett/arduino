@@ -2,7 +2,7 @@
 #include <Adafruit_TinyLSM303.h>
 #include <Adafruit_NeoPixel.h>
 
-#define MOVE_THRESHOLD 6000
+#define MOVE_THRESHOLD 3000
 #define PIN 1
 #define NUM_PIXELS 20
 
@@ -53,12 +53,13 @@ void loop() {
     curr_color_granularity = 20;
     nextColor();
     last_shacke = millis();
-    nr_shackes++;
+    //nr_shackes++;
   }
+/*
   if((millis() - last_shacke) >  party_interval){
     nr_shackes = 0;
   } 
-  
+  */
   storedVector = newVector;
   /*
   if(nr_shackes > 8){
