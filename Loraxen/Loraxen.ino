@@ -2,17 +2,6 @@
 
 #include <Adafruit_NeoPixel.h>
 
-const uint8_t mycolors[][3] PROGMEM = {
-  {252,23,218}, // pink
-  {255,153,0},  // orange
-  {255,0,255},  // magenta
-  {0,0,255}, // blue
-  {0,255,0}, // green
-  {0,255,255}, // cyan
-  {255,255,0}, // yellow
-  {72,209,204} // turqoise
-};
-
 #define LED_PIN 1
 #define PIR_PIN 3
 #define PCELL_PIN A1
@@ -20,7 +9,6 @@ const uint8_t mycolors[][3] PROGMEM = {
 
 #define NUM_PIXELS 12
 #define BG 1
-#define NUM_COLORS 8
 
 // Parameter 1 = number of pixels in strip
 // Parameter 2 = Arduino pin number (most are valid)
@@ -74,19 +62,11 @@ void loop() {
   // if no motion detected, breath
   // if motion detected and within timeout, ripple
   if (motionDetected()) {
-    long randomNumber = random(3);
-    switch (randomNumber) {
-      case 0:
-        ripple();
-        break;
-      case 1:
-        rainbowCycle(0); // fast
-        break;
-      case 2:
-        long idx = random(NUM_COLORS);
-        wave(strip.Color(mycolors[idx][0],mycolors[idx][1],mycolors[idx][2]), 4, 20); // 4 cycles, wait 20
-        break;
+    long randomNumber = random(192);
+    for (int i = 0; i < randomNumber; i++) {
+      ripple();
     }
+    rainbowCycle(0); // fast
   } else {
     breath();
   }
@@ -253,49 +233,14 @@ void breath() {
   }
 }
 
-// Sine wave effect //////////////////////////////////
-
-#define PI 3.14159265
-void wave(uint32_t c, int cycles, uint8_t wait) {
-  float y;
-  byte  r, g, b, r2, g2, b2;
-
-  // Need to decompose color into its r, g, b elements
-  g = (c >> 16) & 0x7f;
-  r = (c >>  8) & 0x7f;
-  b =  c        & 0x7f; 
-
-  for(int x=0; x<(strip.numPixels()*5); x++)
-  {
-    for(int i=0; i<strip.numPixels(); i++) {
-      y = sin(PI * (float)cycles * (float)(x + i) / (float)strip.numPixels());
-      if(y >= 0.0) {
-        // Peaks of sine wave are white
-        y  = 1.0 - y; // Translate Y to 0.0 (top) to 1.0 (center)
-        r2 = 127 - (byte)((float)(127 - r) * y);
-        g2 = 127 - (byte)((float)(127 - g) * y);
-        b2 = 127 - (byte)((float)(127 - b) * y);
-      } else {
-        // Troughs of sine wave are black
-        y += 1.0; // Translate Y to 0.0 (bottom) to 1.0 (center)
-        r2 = (byte)((float)r * y);
-        g2 = (byte)((float)g * y);
-        b2 = (byte)((float)b * y);
-      }
-      strip.setPixelColor(i, r2, g2, b2);
-    }
-    strip.show();
-    delay(wait);
-  }
-}
-
 // Rainbow cycle /////////////////////////////
 
 // Cycle through the color wheel, equally spaced around the belt
 void rainbowCycle(uint8_t wait) {
   uint16_t i, j;
+  long randomNumber = random(1, 6);
 
-  for (j=0; j < 384 * 10; j++) {     // 5 cycles of all 384 colors in the wheel
+  for (j=0; j < 384 * randomNumber; j++) {     // 5 cycles of all 384 colors in the wheel
     for (i=0; i < strip.numPixels(); i++) {
       // tricky math! we use each pixel as a fraction of the full 384-color
       // wheel (thats the i / strip.numPixels() part)
