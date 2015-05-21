@@ -26,7 +26,6 @@ int maxSteps = 16;
 float fadeRate = 0.6;
 int diff;
 
-int photocellPin = A0;
 boolean nighttime = false;
 
 //background color
@@ -34,6 +33,7 @@ uint32_t currentBg = random(256);
 uint32_t nextBg = currentBg;
 
 void setup() {
+  pinMode(PIR_PIN, INPUT);     // declare sensor as input
   randomSeed(analogRead(RAND_PIN));
   strip.begin();
   strip.show(); // Initialize all pixels to 'off'
