@@ -8,8 +8,9 @@
 #define NOT_ASSIGNED -1
 #define BRIGHTER 0
 #define DIMMER 1
-#define MAX_BRIGHTNESS 128
+#define MAX_BRIGHTNESS 192
 #define NUM_FAVS 10
+#define MAX_SPEED 3
 
 uint8_t favorites[NUM_FAVS][3] = {
   {255, 0, 27}, // pink
@@ -24,6 +25,7 @@ uint8_t favorites[NUM_FAVS][3] = {
   {255, 0, 255} // fuchsia
 };
 
+int speeds[ARRAY_SIZE];
 uint32_t colors[ARRAY_SIZE];
 uint16_t brightnessValues[ARRAY_SIZE];
 int pixelpositions[ARRAY_SIZE];
@@ -89,25 +91,26 @@ void loop() {
       colors[i] = strip.Color(favorites[rfcindex][0], favorites[rfcindex][1], favorites[rfcindex][2]); // TODO: make different colors?
       brightnessValues[i] = 0;
       directions[i] = BRIGHTER;
+      speeds[i] = (int)random(1, MAX_SPEED);
     } else {
       setPixelBrightness(pixelpositions[i], getRed(colors[i]), getGreen(colors[i]), getBlue(colors[i]), brightnessValues[i]);
       if (directions[i] == BRIGHTER) {
-        brightnessValues[i]++;
-        if (brightnessValues[i] == MAX_BRIGHTNESS) {
+        brightnessValues[i] += speeds[i];
+        if (brightnessValues[i] >= MAX_BRIGHTNESS) {
           directions[i] = DIMMER;
         }
       } else {
-        brightnessValues[i]--;
+        brightnessValues[i] -= speeds[i];
         // Reset if we are now off
-        if (brightnessValues[i] == 0) {
+        if (brightnessValues[i] <= 0) {
           strip.setPixelColor(pixelpositions[i], 0);
           pixelpositions[i] = NOT_ASSIGNED;
         }
       }
-      strip.show();
-      delay((int)random(10));
     }
   }
+  strip.show();
+  delay(5);
 }
 
 int findRandomPixel() {
