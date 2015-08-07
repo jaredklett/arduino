@@ -4,7 +4,7 @@
 #define RAND_PIN 4
 
 #define NUM_PIXELS 16
-#define ARRAY_SIZE 8
+#define ARRAY_SIZE 6
 #define NOT_ASSIGNED -1
 #define BRIGHTER 0
 #define DIMMER 1
