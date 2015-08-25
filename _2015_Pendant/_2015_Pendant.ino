@@ -1,168 +1,324 @@
-
 #include <Adafruit_NeoPixel.h>
 
-// Pattern types supported:
-enum  pattern { NONE, RAINBOW_CYCLE, THEATER_CHASE, SPARKLE };
-// Patern directions supported:
-enum  direction { FORWARD, REVERSE };
+#define RAND_PIN A1
 
-class NeoPatterns : public Adafruit_NeoPixel {
+#define RING24_PIN 3
+#define RING12_PIN 4
+#define SINGLE_PIN 5
 
-    public:
+#define RING24_NUM_PIXELS 24
+#define RING12_NUM_PIXELS 12
+#define SINGLE_NUM_PIXELS 1
 
-    // Member Variables:  
-    pattern ActivePattern;  // which pattern is running
-    direction Direction;     // direction to run the pattern
-    
-    unsigned long Interval;   // milliseconds between updates
-    unsigned long lastUpdate; // last update of position
-    
-    uint32_t Color1, Color2;  // What colors are in use
-    uint16_t TotalSteps;  // total number of steps in the pattern
-    uint16_t Index;  // current step within the pattern
-    
-    void (*OnComplete)();  // Callback on completion of pattern
+#define RING24_NUM_SPARKS 20
+#define RING12_NUM_SPARKS 10
 
-    // Constructor - calls base-class constructor to initialize strip
-    NeoPatterns(uint16_t pixels, uint8_t pin, uint8_t type, void (*callback)())
-    :Adafruit_NeoPixel(pixels, pin, type)
-    {
-        OnComplete = callback;
-    }
+#define BRIGHTER 0
+#define DIMMER 1
+#define MAX_BRIGHTNESS 222
+#define MIN_SPEED 8
+#define MAX_SPEED 10
+#define INTERVAL 5
 
-    // Update the pattern
-    void Update() {
-        if((millis() - lastUpdate) > Interval) { // time to update
-            lastUpdate = millis();
-            switch(ActivePattern) {
-                case RAINBOW_CYCLE:
-                    RainbowCycleUpdate();
-                    break;
-                case THEATER_CHASE:
-                    TheaterChaseUpdate();
-                    break;
-                case SPARKLE:
-                    SparkleUpdate();
-                    break;
-                default:
-                    break;
-            }
+#define NUM_PALETTES 3
+#define PALETTE_DEPTH 12
+#define PALETTE_SWITCH_INTERVAL 30000
+
+uint8_t palette1[][3] = {
+  {255, 140, 0}, // orange
+  {255, 105, 180}, // BRIGHT pink
+  {128, 0, 128} // purple
+};
+
+uint8_t palette2[][3] = {
+  {255, 0, 0}, // red
+  {0, 0, 255}, // blue
+  {128, 128, 128} // white
+};
+
+uint8_t palette3[][3] = {
+  {255, 255, 0}, // yellow
+  {0, 255, 0}, // green
+  {0, 255, 255}   // cyan
+};
+
+unsigned long lastUpdate = 0;
+unsigned long switchPalette = 0;
+
+int paletteIndex = 0;
+
+// NeoObject class /////////////////////////////////////////////////////////////
+
+class NeoObject : public Adafruit_NeoPixel
+{
+  public:
+
+  uint32_t palettes[NUM_PALETTES][PALETTE_DEPTH];
+
+  NeoObject(uint16_t pixels, uint8_t pin, uint8_t type)
+  :Adafruit_NeoPixel(pixels, pin, type)
+  {
+    for (int x = 0; x < NUM_PALETTES; x++) {
+      for (int y = 0; y < PALETTE_DEPTH; y++) {
+        int i = y % 3;
+        switch (x) {
+          case 0:
+            palettes[x][y] = Color(palette1[i][0], palette1[i][1], palette1[i][2]);
+            break;
+          case 1:
+            palettes[x][y] = Color(palette2[i][0], palette2[i][1], palette2[i][2]);
+            break;
+          case 2:
+            palettes[x][y] = Color(palette3[i][0], palette3[i][1], palette3[i][2]);
+            break;
         }
+      }
     }
+  }
 
-    // Increment the Index and reset at the end
-    void Increment() {
-        if (Direction == FORWARD) {
-           Index++;
-           if (Index >= TotalSteps) {
-                Index = 0;
-                if (OnComplete != NULL) {
-                    OnComplete(); // call the comlpetion callback
-                }
-            }
-        } else { // Direction == REVERSE
-            --Index;
-            if (Index <= 0) {
-                Index = TotalSteps-1;
-                if (OnComplete != NULL) {
-                    OnComplete(); // call the comlpetion callback
-                }
-            }
-        }
-    }
+  uint8_t getRed(uint32_t color) {
+    return (color >> 16) & 0xFF;
+  }
 
-    // Initialize for a RainbowCycle
-    void RainbowCycle(uint8_t interval, direction dir = FORWARD) {
-        ActivePattern = RAINBOW_CYCLE;
-        Interval = interval;
-        TotalSteps = 255;
-        Index = 0;
-        Direction = dir;
+  uint8_t getGreen(uint32_t color) {
+    return (color >> 8) & 0xFF;
+  }
+
+  uint8_t getBlue(uint32_t color) {
+    return color & 0xFF;
+  }
+
+  void setPixelBrightness(uint16_t i, uint8_t r, uint8_t g, uint8_t b, uint16_t brght) {
+    setPixelColor(i, (brght * r / 255), (brght * g / 255), (brght * b / 255));
+  }
+
+}; // class NeoObject
+
+// NeoRing24 class /////////////////////////////////////////////////////////////
+
+class NeoRing24 : public NeoObject
+{
+  public:
+
+  int speeds[RING24_NUM_SPARKS];
+  uint32_t colors[RING24_NUM_SPARKS];
+  uint16_t brightnessValues[RING24_NUM_SPARKS];
+  int pixelpositions[RING24_NUM_SPARKS];
+  int directions[RING24_NUM_SPARKS];
+
+  NeoRing24(uint16_t pixels, uint8_t pin, uint8_t type)
+  :NeoObject(pixels, pin, type)
+  {
+    for (int i = 0; i < RING24_NUM_SPARKS; i++) {
+      resetSpark(i);
     }
-    
-    // Update the Rainbow Cycle Pattern
-    void RainbowCycleUpdate() {
-        for(int i = 0; i < numPixels(); i++) {
-            setPixelColor(i, Wheel(((i * 256 / numPixels()) + Index) & 255));
+  }
+
+  void updateSparks() {
+    for (int i = 0; i < RING24_NUM_SPARKS; i++) {
+      setPixelBrightness(pixelpositions[i], getRed(colors[i]), getGreen(colors[i]), getBlue(colors[i]), brightnessValues[i]);
+      show();
+      if (directions[i] == BRIGHTER) {
+        brightnessValues[i] += speeds[i];
+        if (brightnessValues[i] >= MAX_BRIGHTNESS) {
+          directions[i] = DIMMER;
         }
+      } else {
+        brightnessValues[i] -= speeds[i];
+        // Reset if we are now off
+        if (brightnessValues[i] <= 0) {
+          setPixelColor(pixelpositions[i], 0);
+          show();
+          resetSpark(i);
+        }
+      }
+    }
+  }
+
+  void resetSpark(int i) {
+    int rfcindex = (int)random(PALETTE_DEPTH);
+    colors[i] = palettes[paletteIndex][rfcindex];
+    pixelpositions[i] = findRandomPixel();
+    brightnessValues[i] = 0;
+    directions[i] = BRIGHTER;
+    speeds[i] = (int)random(1, MAX_SPEED);
+  }
+
+  int findRandomPixel() {
+    int randomPosition = (int)random(RING24_NUM_PIXELS);
+    for (int i = 0; i < RING24_NUM_SPARKS; i++) {
+      if (pixelpositions[i] == randomPosition) {
+        randomPosition = findRandomPixel();
+        break;
+      }
+    }
+    return randomPosition;
+  }
+
+  void clearAll() {
+    for (int i = 0; i < RING24_NUM_SPARKS; i++) {
+      resetSpark(i);
+    }
+    clear();
+  }
+
+}; // class NeoRing24
+
+// NeoRing12 class /////////////////////////////////////////////////////////////
+
+class NeoRing12 : public NeoObject
+{
+  public:
+
+  int speeds[RING12_NUM_SPARKS];
+  uint32_t colors[RING12_NUM_SPARKS];
+  uint16_t brightnessValues[RING12_NUM_SPARKS];
+  int pixelpositions[RING12_NUM_SPARKS];
+  int directions[RING12_NUM_SPARKS];
+
+  NeoRing12(uint16_t pixels, uint8_t pin, uint8_t type)
+  :NeoObject(pixels, pin, type)
+  {
+    for (int i = 0; i < RING12_NUM_SPARKS; i++) {
+      resetSpark(i);
+    }
+  }
+
+  void updateSparks() {
+    for (int i = 0; i < RING12_NUM_SPARKS; i++) {
+      setPixelBrightness(pixelpositions[i], getRed(colors[i]), getGreen(colors[i]), getBlue(colors[i]), brightnessValues[i]);
+      show();
+      if (directions[i] == BRIGHTER) {
+        brightnessValues[i] += speeds[i];
+        if (brightnessValues[i] >= MAX_BRIGHTNESS) {
+          directions[i] = DIMMER;
+        }
+      } else {
+        brightnessValues[i] -= speeds[i];
+        // Reset if we are now off
+        if (brightnessValues[i] <= 0) {
+          setPixelColor(pixelpositions[i], 0);
+          show();
+          resetSpark(i);
+        }
+      }
+    }
+  }
+
+  void resetSpark(int i) {
+    int rfcindex = (int)random(PALETTE_DEPTH);
+    colors[i] = palettes[paletteIndex][rfcindex];
+    pixelpositions[i] = findRandomPixel();
+    brightnessValues[i] = 0;
+    directions[i] = BRIGHTER;
+    speeds[i] = (int)random(MIN_SPEED, MAX_SPEED);
+  }
+
+  int findRandomPixel() {
+    int randomPosition = (int)random(RING12_NUM_PIXELS);
+    for (int i = 0; i < RING12_NUM_SPARKS; i++) {
+      if (pixelpositions[i] == randomPosition) {
+        randomPosition = findRandomPixel();
+        break;
+      }
+    }
+    return randomPosition;
+  }
+
+  void clearAll() {
+    for (int i = 0; i < RING12_NUM_SPARKS; i++) {
+      resetSpark(i);
+    }
+    clear();
+  }
+
+}; // class NeoRing12
+
+// NeoSingle class //////////////////////////////////////////////////////////////
+
+class NeoSingle : public NeoObject
+{
+  public:
+
+  int theSpeed;
+  uint32_t theColor;
+  uint16_t brightnessValue;
+  int pixelposition;
+  int theDirection;
+
+  NeoSingle(uint16_t pixels, uint8_t pin, uint8_t type)
+  :NeoObject(pixels, pin, type)
+  {
+    resetSpark();
+  }
+
+  void updateSpark() {
+    setPixelBrightness(pixelposition, getRed(theColor), getGreen(theColor), getBlue(theColor), brightnessValue);
+    show();
+    if (theDirection == BRIGHTER) {
+      brightnessValue += theSpeed;
+      if (brightnessValue >= MAX_BRIGHTNESS) {
+        theDirection = DIMMER;
+      }
+    } else {
+      brightnessValue -= theSpeed;
+      // Reset if we are now off
+      if (brightnessValue <= 0) {
+        setPixelColor(pixelposition, 0);
         show();
-        Increment();
+        resetSpark();
+      }
     }
+  }
 
-    void Sparkle(uint8_t interval, direction dir = FORWARD) {
-        ActivePattern = SPARKLE;
-        Interval = interval;
-        TotalSteps = 255;
-        Index = 0;
-        Direction = dir;
-    }
+  void resetSpark() {
+    int rfcindex = (int)random(PALETTE_DEPTH);
+    theColor = palettes[paletteIndex][rfcindex];
+    pixelposition = 0;
+    brightnessValue = 0;
+    theDirection = BRIGHTER;
+    theSpeed = (int)random(MIN_SPEED, MAX_SPEED);
+  }
 
-    void SparkleUpdate() {
-        
-    }
-    // Returns the Red component of a 32-bit color
-    uint8_t Red(uint32_t color) {
-        return (color >> 16) & 0xFF;
-    }
+  void clearAll() {
+    resetSpark();
+    clear();
+  }
 
-    // Returns the Green component of a 32-bit color
-    uint8_t Green(uint32_t color) {
-        return (color >> 8) & 0xFF;
-    }
+}; // class NeoSingle
 
-    // Returns the Blue component of a 32-bit color
-    uint8_t Blue(uint32_t color) {
-        return color & 0xFF;
-    }
+// Arduino methods //////////////////////////////////////////////////////////////
 
-    // Return color, dimmed by 75% (used by scanner)
-    uint32_t DimColor(uint32_t color) {
-        uint32_t dimColor = Color(Red(color) >> 1, Green(color) >> 1, Blue(color) >> 1);
-        return dimColor;
-    }
-
-    // Input a value 0 to 255 to get a color value.
-    // The colours are a transition r - g - b - back to r.
-    uint32_t Wheel(byte WheelPos) {
-        WheelPos = 255 - WheelPos;
-        if(WheelPos < 85) {
-            return Color(255 - WheelPos * 3, 0, WheelPos * 3);
-        } else if(WheelPos < 170) {
-            WheelPos -= 85;
-            return Color(0, WheelPos * 3, 255 - WheelPos * 3);
-        } else {
-            WheelPos -= 170;
-            return Color(WheelPos * 3, 255 - WheelPos * 3, 0);
-        }
-    }
-
-    // Reverse direction of the pattern
-    void Reverse() {
-        if (Direction == FORWARD) {
-            Direction = REVERSE;
-            Index = TotalSteps-1;
-        } else {
-            Direction = FORWARD;
-            Index = 0;
-        }
-    }
-
-    // Set all pixels to a color (synchronously)
-    void ColorSet(uint32_t color) {
-        for (int i = 0; i < numPixels(); i++) {
-            setPixelColor(i, color);
-        }
-        show();
-    }
-
-}
+NeoRing24 ring24 = NeoRing24(RING24_NUM_PIXELS, RING24_PIN, NEO_GRB + NEO_KHZ800);
+NeoRing12 ring12 = NeoRing12(RING12_NUM_PIXELS, RING12_PIN, NEO_GRB + NEO_KHZ800);
+NeoSingle single = NeoSingle(SINGLE_NUM_PIXELS, SINGLE_PIN, NEO_GRB + NEO_KHZ800);
 
 void setup() {
-  // put your setup code here, to run once:
-
+  randomSeed(analogRead(RAND_PIN));
+  ring24.begin();
+  ring12.begin();
+  single.begin();
+  ring24.show();
+  ring12.show();
+  single.show();
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-
+  if ((millis() - lastUpdate) > INTERVAL) {
+    lastUpdate = millis();
+    ring24.updateSparks();
+    ring12.updateSparks();
+    single.updateSpark();
+  }
+  if ((millis() - switchPalette) > PALETTE_SWITCH_INTERVAL) {
+    switchPalette = millis();
+    paletteIndex++;
+    if (paletteIndex >= NUM_PALETTES) {
+      paletteIndex = 0;
+    }
+    ring24.clearAll();
+    ring12.clearAll();
+    single.clearAll();
+  }
 }
+
