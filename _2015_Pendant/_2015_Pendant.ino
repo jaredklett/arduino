@@ -24,22 +24,25 @@
 #define PALETTE_DEPTH 12
 #define PALETTE_SWITCH_INTERVAL 30000
 
+// Disorient colors with an accent
 uint8_t palette1[][3] = {
   {255, 140, 0}, // orange
   {255, 105, 180}, // BRIGHT pink
   {128, 0, 128} // purple
 };
 
+// Ice
 uint8_t palette2[][3] = {
-  {255, 0, 0}, // red
   {0, 0, 255}, // blue
+  {0, 255, 255}, // cyan
   {128, 128, 128} // white
 };
 
+// Traffic light
 uint8_t palette3[][3] = {
+  {255, 0, 0}, // red
   {255, 255, 0}, // yellow
-  {0, 255, 0}, // green
-  {0, 255, 255}   // cyan
+  {0, 255, 0} // green
 };
 
 unsigned long lastUpdate = 0;
