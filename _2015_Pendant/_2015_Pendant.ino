@@ -10,14 +10,14 @@
 #define RING12_NUM_PIXELS 12
 #define SINGLE_NUM_PIXELS 1
 
-#define RING24_NUM_SPARKS 20
-#define RING12_NUM_SPARKS 10
+#define RING24_NUM_SPARKS 8
+#define RING12_NUM_SPARKS 4
 
 #define BRIGHTER 0
 #define DIMMER 1
 #define MAX_BRIGHTNESS 222
-#define MIN_SPEED 8
-#define MAX_SPEED 10
+#define MIN_SPEED 4
+#define MAX_SPEED 6
 #define INTERVAL 5
 
 #define NUM_PALETTES 3
